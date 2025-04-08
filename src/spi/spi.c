@@ -19,6 +19,7 @@ static const SpiDeviceConfig *dev_config(enum SpiDevice device)
 {
     switch (device) {
         case SPI_SYSCON:
+        {
             static const SpiDeviceConfig s_syscon = {
                 .mmio = DEV_TO_PL022_MMIO(0),
                 .sspcr0 = CR0_SPH | CR0_SPO | CR0_FRF_MOTOROLA | CR0_DSS_16BIT,
@@ -26,8 +27,9 @@ static const SpiDeviceConfig *dev_config(enum SpiDevice device)
             };
 
             return &s_syscon;
-
+        }
         case SPI_HIBARI:
+        {
             static const SpiDeviceConfig s_hibari = {
                 .mmio = DEV_TO_PL022_MMIO(1),
                 .sspcr0 = CR0_FRF_MOTOROLA | CR0_DSS_16BIT,
@@ -35,6 +37,7 @@ static const SpiDeviceConfig *dev_config(enum SpiDevice device)
             };
 
             return &s_hibari;
+        }
     }
 
     // TODO: some warning, or error? this shouldn't be reachable

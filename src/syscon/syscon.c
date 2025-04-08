@@ -14,7 +14,7 @@ int syscon_init(void)
     gpio_clear(GPIO_PORT_SYSCON_REQUEST);
     gpio_set_port_mode(GPIO_PORT_SYSCON_REQUEST, GPIO_MODE_OUTPUT);
     gpio_set_port_mode(GPIO_PORT_TACHYON_SPI_CS, GPIO_MODE_INPUT);
-	sysreg_io_enable_gpio();
+    sysreg_io_enable_gpio();
 
     // syscon communicates over an SPI channel to the allegrex processor.
     // syscon holds the "master" device status, and the allegrex uses a
@@ -49,6 +49,16 @@ unsigned int syscon_get_baryon_version(void)
     // don't need to xchg across SPI everytime we want to know
     // the version
     return g_baryon_version;
+}
+
+unsigned int syscon_get_tachyon_version()
+{
+    unsigned int ver = *(unsigned int*)(0xbc100040);
+    
+    if (ver & 0xFF000000)
+        return (ver >> 8);
+
+    return 0x100000;
 }
 
 int syscon_ctrl_power(unsigned int dev, unsigned int on)
@@ -106,6 +116,14 @@ int syscon_ctrl_hr_power(unsigned int on)
     return syscon_issue_command_write(SYSCON_CTRL_HR_POWER, &on_val, 1);
 }
 
+int syscon_ctrl_ms_power(unsigned int on)
+{
+    unsigned char on_val = on;
+
+    // write message directly to syscon
+    return syscon_issue_command_write(SYSCON_CTRL_MS_POWER, &on_val, 1);
+}
+
 int syscon_get_pommel_version(unsigned int *version)
 {
     return syscon_issue_command_read(SYSCON_GET_POMMEL_VERSION, (unsigned char *)version);
@@ -125,6 +143,27 @@ int syscon_ctrl_voltage(unsigned int a0, unsigned int a1)
 int syscon_get_digital_key(unsigned int *keys)
 {
     return syscon_issue_command_read(SYSCON_GET_DIGITAL_KEY_KERNEL, (unsigned char *)keys);
+}
+
+int syscon_get_wakeup_factor(unsigned int *factor)
+{
+    return syscon_issue_command_read(SYSCON_GET_WAKEUP_FACTOR, (unsigned char *)factor);
+}
+
+int syscon_read_scratchpad(unsigned int src, unsigned int *dest)
+{
+    unsigned char data = (unsigned char)(src << 2) | (unsigned char)(sizeof(unsigned int) >> 1);
+
+    return syscon_issue_command_read_write(SYSCON_READ_SCRATCHPAD, &data, sizeof(data), dest);
+}
+
+int syscon_write_scratchpad(unsigned int dest, unsigned int *src)
+{
+    unsigned char data[5];
+    data[0] = (unsigned char)(dest << 2) | (unsigned char)(sizeof(unsigned int) >> 1);
+    memcpy(&data[1], src, sizeof(unsigned int));
+
+    return syscon_issue_command_write(SYSCON_WRITE_SCRATCHPAD, data, sizeof(data));
 }
 
 int syscon_reset_device(unsigned int a0, unsigned int a1)
@@ -151,4 +190,45 @@ int syscon_reset_device(unsigned int a0, unsigned int a1)
     }
 
     return syscon_issue_command_write(SYSCON_RESET_DEVICE, (unsigned char *)&val, 1);
+}
+
+int syscon_send_auth(unsigned char key, unsigned char *data)
+{
+    unsigned char tx_buf[0x10];
+
+    tx_buf[0] = key;
+    memcpy(&tx_buf[1], data, 8);
+    int result = syscon_issue_command_write(0x30, tx_buf, 9);
+    if (result < 0)
+        return result;
+
+    tx_buf[0] = key + 1;
+    memcpy(&tx_buf[1], &data[8], 8);
+    result = syscon_issue_command_write(0x30, tx_buf, 9);
+    if (result < 0)
+        return result;
+        
+    return 0;
+    
+}
+
+int syscon_recv_auth(unsigned char key, unsigned char *data)
+{
+    unsigned char tx_buf[0x10],rx_buf[0x10];
+
+    tx_buf[0] = key;
+    int result = syscon_issue_command_read_write(0x30, tx_buf, 1, rx_buf);
+    if (result < 0)
+        return result;
+    
+    memcpy(data, rx_buf+1, 8);
+
+    tx_buf[0] = key + 1;
+    result = syscon_issue_command_read_write(0x30, tx_buf, 1, rx_buf);
+    if (result < 0)
+        return result;
+    
+    memcpy(&data[8], rx_buf+1, 8);
+        
+    return 0;
 }
